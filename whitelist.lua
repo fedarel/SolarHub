@@ -1,79 +1,58 @@
 -- Lua 5.1 Whitelist System with HWID Binding
 -- Client-side implementation
 
-local WhitelistSystem = {}
-WhitelistSystem.__index = WhitelistSystem
+print("====================================")
+print("WHITELIST AUTHENTICATION STARTING")
+print("====================================")
 
 -- Configuration
 local CONFIG = {
     API_URL = "https://e663dd99-d6c1-4842-bfa2-cd784e91e9c5-00-1mpetcow43qg8.riker.replit.dev/api/verify",
-    TIMEOUT = 10,
     MAX_RETRIES = 3,
     KEY_LENGTH = 32
 }
 
--- Color codes for printing
-local COLORS = {
-    GREEN = "\27[32m",
-    RED = "\27[31m",
-    YELLOW = "\27[33m",
-    CYAN = "\27[36m",
-    RESET = "\27[0m",
-    BOLD = "\27[1m"
-}
+-- Color codes
+local GREEN = "\27[32m"
+local RED = "\27[31m"
+local YELLOW = "\27[33m"
+local CYAN = "\27[36m"
+local RESET = "\27[0m"
 
--- Enhanced print function with colors
-local function colorPrint(message, color)
-    color = color or COLORS.GREEN
-    local formattedMsg = color .. message .. COLORS.RESET
-    
-    if rconsoleprint then
-        rconsoleprint(formattedMsg .. "\n")
-    elseif printconsole then
-        printconsole(formattedMsg)
-    else
-        print(formattedMsg)
-    end
-end
-
--- Loading animation
-local function showLoading(message)
-    colorPrint("╔══════════════════════════════════════╗", COLORS.CYAN)
-    colorPrint("║     " .. COLORS.BOLD .. "WHITELIST AUTHENTICATION" .. COLORS.RESET .. COLORS.CYAN .. "     ║", COLORS.CYAN)
-    colorPrint("╚══════════════════════════════════════╝", COLORS.CYAN)
-    colorPrint("")
-    colorPrint("⟳ " .. message .. "...", COLORS.YELLOW)
+-- Print with colors
+local function colorPrint(msg, color)
+    print((color or GREEN) .. msg .. RESET)
 end
 
 -- Success message
 local function showSuccess(username, expiry)
-    colorPrint("")
-    colorPrint("╔══════════════════════════════════════╗", COLORS.GREEN)
-    colorPrint("║           ✓ AUTHENTICATED           ║", COLORS.GREEN)
-    colorPrint("╚══════════════════════════════════════╝", COLORS.GREEN)
-    colorPrint("")
-    colorPrint("  User: " .. username, COLORS.GREEN)
-    colorPrint("  Expiry: " .. expiry, COLORS.GREEN)
-    colorPrint("  Status: Active", COLORS.GREEN)
-    colorPrint("")
-    colorPrint("════════════════════════════════════════", COLORS.GREEN)
-    colorPrint("")
+    print("")
+    colorPrint("╔══════════════════════════════════════╗", GREEN)
+    colorPrint("║           ✓ AUTHENTICATED           ║", GREEN)
+    colorPrint("╚══════════════════════════════════════╝", GREEN)
+    print("")
+    colorPrint("  User: " .. username, GREEN)
+    colorPrint("  Expiry: " .. expiry, GREEN)
+    colorPrint("  Status: Active", GREEN)
+    print("")
+    colorPrint("════════════════════════════════════════", GREEN)
+    print("")
 end
 
 -- Error message
 local function showError(message)
-    colorPrint("")
-    colorPrint("╔══════════════════════════════════════╗", COLORS.RED)
-    colorPrint("║        ✗ AUTHENTICATION FAILED       ║", COLORS.RED)
-    colorPrint("╚══════════════════════════════════════╝", COLORS.RED)
-    colorPrint("")
-    colorPrint("  Error: " .. message, COLORS.RED)
-    colorPrint("")
-    colorPrint("════════════════════════════════════════", COLORS.RED)
-    colorPrint("")
+    print("")
+    colorPrint("╔══════════════════════════════════════╗", RED)
+    colorPrint("║        ✗ AUTHENTICATION FAILED       ║", RED)
+    colorPrint("╚══════════════════════════════════════╝", RED)
+    print("")
+    colorPrint("  Error: " .. message, RED)
+    print("")
+    colorPrint("════════════════════════════════════════", RED)
+    print("")
 end
 
--- Validation
+-- Validate key
 local function isValidKey(key)
     if not key or type(key) ~= "string" then
         return false, "Key must be a string"
@@ -90,7 +69,7 @@ local function isValidKey(key)
     return true
 end
 
--- JSON encode function (since we can't use HttpService on client)
+-- Simple JSON encode
 local function jsonEncode(tbl)
     local result = "{"
     local first = true
@@ -108,119 +87,13 @@ local function jsonEncode(tbl)
     return result
 end
 
--- JSON decode function (basic)
-local function jsonDecode(str)
-    -- Remove whitespace
-    str = str:gsub("%s+", "")
-    
-    -- Parse simple JSON object
-    local result = {}
-    
-    -- Extract key-value pairs
-    for key, value in str:gmatch('"([^"]+)"%s*:%s*"([^"]+)"') do
-        result[key] = value
-    end
-    
-    -- Handle boolean values
-    for key, value in str:gmatch('"([^"]+)"%s*:%s*([^,}]+)') do
-        if value == "true" then
-            result[key] = true
-        elseif value == "false" then
-            result[key] = false
-        elseif tonumber(value) then
-            result[key] = tonumber(value)
-        end
-    end
-    
-    return result
-end
-
--- HTTP request function for client-side executors
-local function makeRequest(url, method, data)
-    colorPrint("  → Sending request to API...", COLORS.YELLOW)
-    
-    local success, response = pcall(function()
-        local body = jsonEncode(data)
-        
-        colorPrint("  → Request URL: " .. url, COLORS.YELLOW)
-        
-        -- Try request function (works in most executors like Synapse, Script-Ware, etc.)
-        if request then
-            colorPrint("  → Using request()", COLORS.YELLOW)
-            local result = request({
-                Url = url,
-                Method = method,
-                Headers = {
-                    ["Content-Type"] = "application/json"
-                },
-                Body = body
-            })
-            return result
-        end
-        
-        -- Try http_request
-        if http_request then
-            colorPrint("  → Using http_request()", COLORS.YELLOW)
-            local result = http_request({
-                Url = url,
-                Method = method,
-                Headers = {
-                    ["Content-Type"] = "application/json"
-                },
-                Body = body
-            })
-            return result
-        end
-        
-        -- Try syn.request (Synapse X)
-        if syn and syn.request then
-            colorPrint("  → Using syn.request()", COLORS.YELLOW)
-            local result = syn.request({
-                Url = url,
-                Method = method,
-                Headers = {
-                    ["Content-Type"] = "application/json"
-                },
-                Body = body
-            })
-            return result
-        end
-        
-        -- Try http.request
-        if http and http.request then
-            colorPrint("  → Using http.request()", COLORS.YELLOW)
-            local result = http.request({
-                Url = url,
-                Method = method,
-                Headers = {
-                    ["Content-Type"] = "application/json"
-                },
-                Body = body
-            })
-            return result
-        end
-        
-        error("No HTTP request function available! Your executor might not support HTTP requests.")
-    end)
-    
-    if success then
-        colorPrint("  ✓ Request successful", COLORS.GREEN)
-        return response
-    else
-        colorPrint("  ✗ Request failed: " .. tostring(response), COLORS.RED)
-        return nil, response
-    end
-end
-
 -- Get HWID
 local function getHWID()
-    -- Try gethwid() first (most executors)
     if gethwid then
         return gethwid()
     end
     
-    -- Try getting executor name and user ID
-    if game and game:GetService("Players").LocalPlayer then
+    if game then
         local player = game:GetService("Players").LocalPlayer
         local userId = tostring(player.UserId)
         
@@ -231,21 +104,102 @@ local function getHWID()
         return "ROBLOX-" .. userId
     end
     
-    -- Fallback to environment variables (non-Roblox)
-    if os and os.getenv then
-        local username = os.getenv("USERNAME") or os.getenv("USER") or "unknown"
-        local computername = os.getenv("COMPUTERNAME") or os.getenv("HOSTNAME") or "unknown"
-        return username .. "-" .. computername
-    end
-    
     return "UNKNOWN-HWID"
 end
 
+-- Make HTTP request
+local function makeRequest(url, method, data)
+    local body = jsonEncode(data)
+    
+    colorPrint("→ Sending authentication request...", YELLOW)
+    
+    local success, response = pcall(function()
+        if request then
+            return request({
+                Url = url,
+                Method = method,
+                Headers = {
+                    ["Content-Type"] = "application/json"
+                },
+                Body = body
+            })
+        elseif http_request then
+            return http_request({
+                Url = url,
+                Method = method,
+                Headers = {
+                    ["Content-Type"] = "application/json"
+                },
+                Body = body
+            })
+        elseif syn and syn.request then
+            return syn.request({
+                Url = url,
+                Method = method,
+                Headers = {
+                    ["Content-Type"] = "application/json"
+                },
+                Body = body
+            })
+        else
+            error("No HTTP function available")
+        end
+    end)
+    
+    if success then
+        return response
+    else
+        return nil, response
+    end
+end
+
+-- Parse JSON response
+local function parseResponse(response)
+    -- Check if response is a table (parsed JSON)
+    if type(response) == "table" then
+        -- Check if it has Body property (string)
+        if response.Body and type(response.Body) == "string" then
+            local body = response.Body
+            
+            -- Parse the JSON body manually
+            local success = body:match('"success"%s*:%s*(%a+)')
+            local message = body:match('"message"%s*:%s*"([^"]+)"')
+            local username = body:match('"username"%s*:%s*"([^"]+)"')
+            local expiry = body:match('"expiry"%s*:%s*"([^"]+)"')
+            
+            return {
+                success = (success == "true"),
+                message = message,
+                username = username,
+                expiry = expiry
+            }
+        elseif response.success ~= nil then
+            -- Already parsed
+            return response
+        end
+    elseif type(response) == "string" then
+        -- Parse string JSON
+        local success = response:match('"success"%s*:%s*(%a+)')
+        local message = response:match('"message"%s*:%s*"([^"]+)"')
+        local username = response:match('"username"%s*:%s*"([^"]+)"')
+        local expiry = response:match('"expiry"%s*:%s*"([^"]+)"')
+        
+        return {
+            success = (success == "true"),
+            message = message,
+            username = username,
+            expiry = expiry
+        }
+    end
+    
+    return nil
+end
+
 -- Verify key with API
-local function verifyKeyWithAPI(key)
+local function verifyKey(key)
     local hwid = getHWID()
     
-    colorPrint("  HWID: " .. hwid:sub(1, 30) .. "...", COLORS.CYAN)
+    colorPrint("→ HWID: " .. hwid:sub(1, 40) .. "...", CYAN)
     
     local requestData = {
         key = key,
@@ -253,69 +207,55 @@ local function verifyKeyWithAPI(key)
         timestamp = tostring(os.time())
     }
     
-    showLoading("Connecting to authentication server")
-    
-    local retries = 0
-    while retries < CONFIG.MAX_RETRIES do
-        colorPrint("  Attempt " .. (retries + 1) .. "/" .. CONFIG.MAX_RETRIES .. "...", COLORS.YELLOW)
+    for attempt = 1, CONFIG.MAX_RETRIES do
+        colorPrint("→ Attempt " .. attempt .. "/" .. CONFIG.MAX_RETRIES, YELLOW)
         
         local response, err = makeRequest(CONFIG.API_URL, "POST", requestData)
         
         if response then
-            local success, data = pcall(function()
-                -- Handle different response formats
-                if type(response) == "string" then
-                    colorPrint("  → Parsing string response", COLORS.YELLOW)
-                    return jsonDecode(response)
-                elseif type(response) == "table" then
-                    if response.Body then
-                        colorPrint("  → Parsing response.Body", COLORS.YELLOW)
-                        return jsonDecode(response.Body)
-                    elseif response.success ~= nil then
-                        colorPrint("  → Using response directly", COLORS.YELLOW)
-                        return response
-                    end
-                end
-                
-                error("Unknown response format")
-            end)
+            colorPrint("✓ Got response from server", GREEN)
             
-            if success and data and data.success ~= nil then
-                colorPrint("  ✓ Response parsed successfully", COLORS.GREEN)
-                return data.success, data.message or "Success", data
+            local data = parseResponse(response)
+            
+            if data and data.success ~= nil then
+                return data.success, data.message, data
             else
-                colorPrint("  ✗ Failed to parse response: " .. tostring(data), COLORS.RED)
+                colorPrint("✗ Failed to parse response", RED)
+                print("Response type: " .. type(response))
+                print("Response: " .. tostring(response))
             end
         else
-            colorPrint("  ✗ No response from server: " .. tostring(err), COLORS.RED)
+            colorPrint("✗ Request failed: " .. tostring(err), RED)
         end
         
-        retries = retries + 1
-        if retries < CONFIG.MAX_RETRIES then
-            colorPrint("  Waiting 2 seconds before retry...", COLORS.YELLOW)
+        if attempt < CONFIG.MAX_RETRIES then
+            colorPrint("→ Retrying in 2 seconds...", YELLOW)
             task.wait(2)
         end
     end
     
-    return false, "Failed to connect to authentication server after " .. CONFIG.MAX_RETRIES .. " attempts", nil
+    return false, "Failed to connect after " .. CONFIG.MAX_RETRIES .. " attempts", nil
 end
 
--- Main authentication function
-local function authenticateOnLoad()
+-- Main authentication
+local function authenticate()
     local key = getgenv().key
     
     if not key then
-        showError("No key provided! Set getgenv().key before loading the script")
+        showError("No key provided! Set getgenv().key first")
         return false
     end
     
-    local keyValid, keyError = isValidKey(key)
-    if not keyValid then
-        showError(keyError)
+    colorPrint("→ Validating key format...", CYAN)
+    local valid, err = isValidKey(key)
+    if not valid then
+        showError(err)
         return false
     end
     
-    local success, message, data = verifyKeyWithAPI(key)
+    colorPrint("✓ Key format valid", GREEN)
+    
+    local success, message, data = verifyKey(key)
     
     if success then
         showSuccess(data.username or "Unknown", data.expiry or "Never")
@@ -329,16 +269,20 @@ local function authenticateOnLoad()
         
         return true
     else
-        showError(message)
+        showError(message or "Authentication failed")
         return false
     end
 end
 
--- Run authentication
-local authSuccess = authenticateOnLoad()
+-- Run
+local result = authenticate()
 
-if not authSuccess then
-    error("[Whitelist] Authentication failed")
+if not result then
+    error("[Whitelist] Authentication failed - Script will not load")
 end
+
+print("====================================")
+print("WHITELIST CHECK COMPLETE")
+print("====================================")
 
 return true
