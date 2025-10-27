@@ -6,11 +6,79 @@ WhitelistSystem.__index = WhitelistSystem
 
 -- Configuration
 local CONFIG = {
-    API_URL = "https://e663dd99-d6c1-4842-bfa2-cd784e91e9c5-00-1mpetcow43qg8.riker.replit.dev:3000/api/verify", -- Replace with your API endpoint
+    API_URL = "https://e663dd99-d6c1-4842-bfa2-cd784e91e9c5-00-1mpetcow43qg8.riker.replit.dev/api/verify",
     TIMEOUT = 10,
     MAX_RETRIES = 3,
     KEY_LENGTH = 32
 }
+
+-- Color codes for printing (ANSI escape codes - works in most terminals/executors)
+local COLORS = {
+    GREEN = "\27[32m",
+    RED = "\27[31m",
+    YELLOW = "\27[33m",
+    CYAN = "\27[36m",
+    RESET = "\27[0m",
+    BOLD = "\27[1m"
+}
+
+-- Check if executor supports colors
+local function supportsColors()
+    return rconsoleprint or printconsole or (syn and syn.crypt)
+end
+
+-- Enhanced print function with colors
+local function colorPrint(message, color)
+    color = color or COLORS.GREEN
+    local formattedMsg = color .. message .. COLORS.RESET
+    
+    -- Try different print methods based on executor
+    if rconsoleprint then
+        rconsoleprint(formattedMsg .. "\n")
+    elseif printconsole then
+        printconsole(formattedMsg)
+    else
+        print(formattedMsg)
+    end
+end
+
+-- Animated loading effect
+local function showLoading(message)
+    local frames = {"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
+    local currentFrame = 1
+    
+    colorPrint("╔══════════════════════════════════════╗", COLORS.CYAN)
+    colorPrint("║     " .. COLORS.BOLD .. "WHITELIST AUTHENTICATION" .. COLORS.RESET .. COLORS.CYAN .. "     ║", COLORS.CYAN)
+    colorPrint("╚══════════════════════════════════════╝", COLORS.CYAN)
+    colorPrint("")
+    colorPrint(frames[currentFrame] .. " " .. message .. "...", COLORS.YELLOW)
+end
+
+-- Success message
+local function showSuccess(username, expiry)
+    colorPrint("")
+    colorPrint("╔══════════════════════════════════════╗", COLORS.GREEN)
+    colorPrint("║           ✓ AUTHENTICATED           ║", COLORS.GREEN)
+    colorPrint("╚══════════════════════════════════════╝", COLORS.GREEN)
+    colorPrint("")
+    colorPrint("  User: " .. username, COLORS.GREEN)
+    colorPrint("  Expiry: " .. expiry, COLORS.GREEN)
+    colorPrint("  Status: Active", COLORS.GREEN)
+    colorPrint("")
+    colorPrint("════════════════════════════════════════", COLORS.GREEN)
+end
+
+-- Error message
+local function showError(message)
+    colorPrint("")
+    colorPrint("╔══════════════════════════════════════╗", COLORS.RED)
+    colorPrint("║        ✗ AUTHENTICATION FAILED       ║", COLORS.RED)
+    colorPrint("╚══════════════════════════════════════╝", COLORS.RED)
+    colorPrint("")
+    colorPrint("  Error: " .. message, COLORS.RED)
+    colorPrint("")
+    colorPrint("════════════════════════════════════════", COLORS.RED)
+end
 
 -- Validation functions
 local function isValidKey(key)
@@ -22,7 +90,6 @@ local function isValidKey(key)
         return false, "Key must be exactly " .. CONFIG.KEY_LENGTH .. " characters"
     end
     
-    -- Check if key contains only alphanumeric characters
     if not key:match("^[%w]+$") then
         return false, "Key must contain only letters and numbers"
     end
@@ -30,11 +97,12 @@ local function isValidKey(key)
     return true
 end
 
--- HTTP request function (adjust based on your environment)
+-- HTTP request function
 local function makeRequest(url, method, data)
     local success, response = pcall(function()
         if http and http.request then
-            local body = game:GetService("HttpService"):JSONEncode(data)
+            local HttpService = game:GetService("HttpService")
+            local body = HttpService:JSONEncode(data)
             return http.request({
                 Url = url,
                 Method = method,
@@ -44,7 +112,6 @@ local function makeRequest(url, method, data)
                 Body = body
             })
         elseif game then
-            -- Roblox environment
             local HttpService = game:GetService("HttpService")
             local body = HttpService:JSONEncode(data)
             return HttpService:RequestAsync({
@@ -67,7 +134,7 @@ local function makeRequest(url, method, data)
     end
 end
 
--- Get HWID (Hardware ID) - adjust based on your environment
+-- Get HWID
 local function getHWID()
     if gethwid then
         return gethwid()
@@ -96,14 +163,21 @@ function WhitelistSystem:verifyKey(key)
         timestamp = os.time()
     }
     
+    showLoading("Connecting to authentication server")
+    
     local retries = 0
     while retries < CONFIG.MAX_RETRIES do
+        colorPrint("  ⟳ Attempt " .. (retries + 1) .. "/" .. CONFIG.MAX_RETRIES, COLORS.YELLOW)
+        
         local response, err = makeRequest(CONFIG.API_URL, "POST", requestData)
         
         if response then
             local success, data = pcall(function()
+                local HttpService = game:GetService("HttpService")
                 if type(response) == "string" then
-                    return game:GetService("HttpService"):JSONDecode(response)
+                    return HttpService:JSONDecode(response)
+                elseif response.Body then
+                    return HttpService:JSONDecode(response.Body)
                 else
                     return response
                 end
@@ -115,7 +189,9 @@ function WhitelistSystem:verifyKey(key)
         end
         
         retries = retries + 1
-        wait(1)
+        if retries < CONFIG.MAX_RETRIES then
+            wait(1)
+        end
     end
     
     return false, "Failed to connect to authentication server", nil
@@ -123,75 +199,66 @@ end
 
 -- Main authentication function
 function WhitelistSystem:authenticate(key)
-    -- Validate key
     local keyValid, keyError = isValidKey(key)
     if not keyValid then
+        showError(keyError)
         return false, keyError, nil
     end
-    
-    print("[Whitelist] Authenticating...")
-    print("[Whitelist] Key: " .. string.sub(key, 1, 8) .. "..." .. string.sub(key, -4))
-    print("[Whitelist] HWID: " .. getHWID())
     
     local success, message, data = self:verifyKey(key)
     
     if success then
-        print("[Whitelist] ✓ Authentication successful!")
-        print("[Whitelist] User: " .. (data.username or "Unknown"))
-        print("[Whitelist] Expiry: " .. (data.expiry or "Never"))
+        showSuccess(data.username or "Unknown", data.expiry or "Never")
         return true, message, data
     else
-        print("[Whitelist] ✗ Authentication failed: " .. message)
+        showError(message)
         return false, message, nil
     end
 end
 
--- Create global function for easy access
+-- Create global function
 getgenv = getgenv or function() return _G end
 
-getgenv().key = function(keyString)
-    -- Validate key before creating instance
-    local keyValid, keyError = isValidKey(keyString)
-    if not keyValid then
-        error("[Whitelist] Invalid key: " .. keyError)
-        return false
-    end
-    
-    local ws = setmetatable({}, WhitelistSystem)
-    local success, message, data = ws:authenticate(keyString)
-    
-    if not success then
-        error("[Whitelist] Authentication failed: " .. message)
-        return false
-    end
-    
+-- Main entry point
+getgenv().key = function()
     return {
-        success = true,
-        message = message,
-        data = data,
-        username = data.username,
-        execute = function(code)
-            if success then
-                local func, err = loadstring(code)
-                if func then
-                    return pcall(func)
+        loadstring = function(keyString)
+            -- Validate key
+            local keyValid, keyError = isValidKey(keyString)
+            if not keyValid then
+                showError(keyError)
+                return function() 
+                    error("[Whitelist] Invalid key: " .. keyError)
+                end
+            end
+            
+            -- Authenticate
+            local ws = setmetatable({}, WhitelistSystem)
+            local success, message, data = ws:authenticate(keyString)
+            
+            if not success then
+                return function()
+                    error("[Whitelist] Authentication failed: " .. message)
+                end
+            end
+            
+            -- Return function that will execute provided code
+            return function(code)
+                if type(code) == "string" then
+                    local func, err = loadstring(code)
+                    if func then
+                        colorPrint("  ▶ Executing protected script...", COLORS.CYAN)
+                        colorPrint("", COLORS.RESET)
+                        return pcall(func)
+                    else
+                        showError("Code execution error: " .. tostring(err))
+                    end
                 else
-                    error("[Whitelist] Code execution error: " .. tostring(err))
+                    showError("Code must be a string")
                 end
             end
         end
     }
-end
-
--- Alternative usage: Direct verification
-getgenv().verifyKey = function(keyString)
-    local keyValid, keyError = isValidKey(keyString)
-    if not keyValid then
-        return false, keyError, nil
-    end
-    
-    local ws = setmetatable({}, WhitelistSystem)
-    return ws:authenticate(keyString)
 end
 
 return WhitelistSystem
