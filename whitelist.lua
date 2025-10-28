@@ -1,9 +1,64 @@
 -- Lua 5.1 Whitelist System with HWID Binding
--- Client-side implementation
+-- Professional whitelist like Luarmor
 
-print("====================================")
-print("WHITELIST AUTHENTICATION STARTING")
-print("====================================")
+local function printHeader()
+    print("")
+    print("════════════════════════════════════════════════════════")
+    print("                 WHITELIST AUTHENTICATION                ")
+    print("════════════════════════════════════════════════════════")
+    print("")
+end
+
+local function printSuccess(username, expiry, isNew)
+    print("")
+    print("╔════════════════════════════════════════════════════════╗")
+    print("║                                                        ║")
+    print("║                  ✓ AUTHENTICATED ✓                     ║")
+    print("║                                                        ║")
+    print("╚════════════════════════════════════════════════════════╝")
+    print("")
+    print("  → User: " .. username)
+    print("  → Expiry: " .. expiry)
+    if isNew then
+        print("  → HWID: BOUND TO THIS DEVICE")
+    else
+        print("  → HWID: VERIFIED")
+    end
+    print("  → Status: ACTIVE")
+    print("")
+    print("════════════════════════════════════════════════════════")
+    print("")
+end
+
+local function printError(message, kickPlayer)
+    print("")
+    print("╔════════════════════════════════════════════════════════╗")
+    print("║                                                        ║")
+    print("║              ✗ AUTHENTICATION FAILED ✗                 ║")
+    print("║                                                        ║")
+    print("╚════════════════════════════════════════════════════════╝")
+    print("")
+    print("  ERROR: " .. message)
+    print("")
+    print("════════════════════════════════════════════════════════")
+    print("")
+    
+    if kickPlayer and game and game:GetService("Players").LocalPlayer then
+        task.wait(3)
+        game:GetService("Players").LocalPlayer:Kick("\n\n" .. 
+            "═══════════════════════════════════════\n" ..
+            "     WHITELIST AUTHENTICATION FAILED\n" ..
+            "═══════════════════════════════════════\n\n" ..
+            message .. "\n\n" ..
+            "Contact support if you need assistance.\n\n" ..
+            "═══════════════════════════════════════"
+        )
+    end
+end
+
+local function printStep(message)
+    print("  → " .. message)
+end
 
 -- Configuration
 local CONFIG = {
@@ -11,46 +66,6 @@ local CONFIG = {
     MAX_RETRIES = 3,
     KEY_LENGTH = 32
 }
-
--- Color codes
-local GREEN = "\27[32m"
-local RED = "\27[31m"
-local YELLOW = "\27[33m"
-local CYAN = "\27[36m"
-local RESET = "\27[0m"
-
--- Print with colors
-local function colorPrint(msg, color)
-    print((color or GREEN) .. msg .. RESET)
-end
-
--- Success message
-local function showSuccess(username, expiry)
-    print("")
-    colorPrint("╔══════════════════════════════════════╗", GREEN)
-    colorPrint("║           ✓ AUTHENTICATED           ║", GREEN)
-    colorPrint("╚══════════════════════════════════════╝", GREEN)
-    print("")
-    colorPrint("  User: " .. username, GREEN)
-    colorPrint("  Expiry: " .. expiry, GREEN)
-    colorPrint("  Status: Active", GREEN)
-    print("")
-    colorPrint("════════════════════════════════════════", GREEN)
-    print("")
-end
-
--- Error message
-local function showError(message)
-    print("")
-    colorPrint("╔══════════════════════════════════════╗", RED)
-    colorPrint("║        ✗ AUTHENTICATION FAILED       ║", RED)
-    colorPrint("╚══════════════════════════════════════╝", RED)
-    print("")
-    colorPrint("  Error: " .. message, RED)
-    print("")
-    colorPrint("════════════════════════════════════════", RED)
-    print("")
-end
 
 -- Validate key
 local function isValidKey(key)
@@ -69,7 +84,7 @@ local function isValidKey(key)
     return true
 end
 
--- Simple JSON encode
+-- JSON encode
 local function jsonEncode(tbl)
     local result = "{"
     local first = true
@@ -110,8 +125,6 @@ end
 -- Make HTTP request
 local function makeRequest(url, method, data)
     local body = jsonEncode(data)
-    
-    colorPrint("→ Sending authentication request...", YELLOW)
     
     local success, response = pcall(function()
         if request then
@@ -155,40 +168,39 @@ end
 
 -- Parse JSON response
 local function parseResponse(response)
-    -- Check if response is a table (parsed JSON)
     if type(response) == "table" then
-        -- Check if it has Body property (string)
         if response.Body and type(response.Body) == "string" then
             local body = response.Body
             
-            -- Parse the JSON body manually
             local success = body:match('"success"%s*:%s*(%a+)')
             local message = body:match('"message"%s*:%s*"([^"]+)"')
             local username = body:match('"username"%s*:%s*"([^"]+)"')
             local expiry = body:match('"expiry"%s*:%s*"([^"]+)"')
+            local isNewBinding = body:match('"isNewBinding"%s*:%s*(%a+)')
             
             return {
                 success = (success == "true"),
                 message = message,
                 username = username,
-                expiry = expiry
+                expiry = expiry,
+                isNewBinding = (isNewBinding == "true")
             }
         elseif response.success ~= nil then
-            -- Already parsed
             return response
         end
     elseif type(response) == "string" then
-        -- Parse string JSON
         local success = response:match('"success"%s*:%s*(%a+)')
         local message = response:match('"message"%s*:%s*"([^"]+)"')
         local username = response:match('"username"%s*:%s*"([^"]+)"')
         local expiry = response:match('"expiry"%s*:%s*"([^"]+)"')
+        local isNewBinding = response:match('"isNewBinding"%s*:%s*(%a+)')
         
         return {
             success = (success == "true"),
             message = message,
             username = username,
-            expiry = expiry
+            expiry = expiry,
+            isNewBinding = (isNewBinding == "true")
         }
     end
     
@@ -199,7 +211,7 @@ end
 local function verifyKey(key)
     local hwid = getHWID()
     
-    colorPrint("→ HWID: " .. hwid:sub(1, 40) .. "...", CYAN)
+    printStep("HWID: " .. hwid:sub(1, 40) .. "...")
     
     local requestData = {
         key = key,
@@ -208,81 +220,90 @@ local function verifyKey(key)
     }
     
     for attempt = 1, CONFIG.MAX_RETRIES do
-        colorPrint("→ Attempt " .. attempt .. "/" .. CONFIG.MAX_RETRIES, YELLOW)
+        printStep("Connecting to server... (Attempt " .. attempt .. "/" .. CONFIG.MAX_RETRIES .. ")")
         
         local response, err = makeRequest(CONFIG.API_URL, "POST", requestData)
         
         if response then
-            colorPrint("✓ Got response from server", GREEN)
+            printStep("Server response received")
             
             local data = parseResponse(response)
             
             if data and data.success ~= nil then
-                return data.success, data.message, data
+                if data.success then
+                    return true, data.message, data
+                else
+                    -- Authentication failed - check if it's HWID mismatch
+                    if data.message and data.message:find("bound to another device") then
+                        return false, "HWID MISMATCH: This key is bound to another device.\n\n  Contact support to reset your HWID.", true
+                    else
+                        return false, data.message, false
+                    end
+                end
             else
-                colorPrint("✗ Failed to parse response", RED)
-                print("Response type: " .. type(response))
-                print("Response: " .. tostring(response))
+                printStep("Failed to parse server response")
             end
         else
-            colorPrint("✗ Request failed: " .. tostring(err), RED)
+            printStep("Connection failed: " .. tostring(err))
         end
         
         if attempt < CONFIG.MAX_RETRIES then
-            colorPrint("→ Retrying in 2 seconds...", YELLOW)
+            printStep("Retrying in 2 seconds...")
             task.wait(2)
         end
     end
     
-    return false, "Failed to connect after " .. CONFIG.MAX_RETRIES .. " attempts", nil
+    return false, "Failed to connect to authentication server after " .. CONFIG.MAX_RETRIES .. " attempts.\n\n  Check your internet connection.", false
 end
 
 -- Main authentication
 local function authenticate()
+    printHeader()
+    
     local key = getgenv().key
     
     if not key then
-        showError("No key provided! Set getgenv().key first")
+        printError("No key provided!\n\n  Set getgenv().key before loading the script.", true)
         return false
     end
     
-    colorPrint("→ Validating key format...", CYAN)
+    printStep("Validating key format...")
     local valid, err = isValidKey(key)
     if not valid then
-        showError(err)
+        printError(err, true)
         return false
     end
     
-    colorPrint("✓ Key format valid", GREEN)
+    printStep("Key format valid")
+    printStep("Authenticating with server...")
+    print("")
     
     local success, message, data = verifyKey(key)
     
     if success then
-        showSuccess(data.username or "Unknown", data.expiry or "Never")
+        printSuccess(data.username or "Unknown", data.expiry or "Never", data.isNewBinding)
         
         getgenv().whitelistData = {
             authenticated = true,
             username = data.username,
             expiry = data.expiry,
+            isNewBinding = data.isNewBinding,
             timestamp = os.time()
         }
         
         return true
     else
-        showError(message or "Authentication failed")
+        -- Kick player on authentication failure
+        printError(message or "Authentication failed", data)
         return false
     end
 end
 
--- Run
+-- Run authentication
 local result = authenticate()
 
 if not result then
     error("[Whitelist] Authentication failed - Script will not load")
 end
-
-print("====================================")
-print("WHITELIST CHECK COMPLETE")
-print("====================================")
 
 return true
